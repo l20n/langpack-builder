@@ -161,7 +161,7 @@ suite('Lp builder', function() {
       .then(cleanup)
       .then(build)
       .then(compare)
-      .then(checkIcon)
+      //.then(checkIcon)
       .then(function() {
       done();
     }).catch(function(e) {
