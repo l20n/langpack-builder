@@ -22,52 +22,45 @@ var config = {
   LP_VERSION: '1.0.0',
   LP_APPS: null,
   LP_APP_TASKS: ['copy', 'appmanifests', 'optimize'],
-  LP_LOCALE_TASKS: [],
+  LP_LOCALE_TASKS: ['copySpeechData'],
 
   LOCALES: ['fr'],
   LOCALE_BASEDIR: './tests/tmp/gaia-l10n/fr',
 };
 
-function getGaiaRevision() {
-  return new Promise(function(resolve) {
-    exec('cd ' + config.GAIA_DIR + ' && git rev-parse HEAD',
+function updateGaiaRevision(rev) {
+  return new Promise(function(resolve, reject) {
+    exec('cd ' + config.GAIA_DIR + ' && git co ' + rev,
       function(error, stdout) {
-        var gaia_rev = stdout.trim();
-        resolve(gaia_rev);
+        if (error) {
+          reject(error);
+        } else {
+          var gaia_rev = stdout.trim();
+          resolve(gaia_rev);
+        }
       });
   });
 }
 
-function getLocaleRevision() {
-  return new Promise(function(resolve) {
-    exec('cd ' + config.LOCALE_BASEDIR + ' && hg id -i',
+function updateLocaleRevision(rev) {
+  return new Promise(function(resolve, reject) {
+    exec('cd ' + config.LOCALE_BASEDIR + ' && hg co ' + rev,
       function (error, stdout) {
-        var hg_rev = stdout.trim();
-        resolve(hg_rev);
+        if (error) {
+          reject(error);
+        } else {
+          var hg_rev = stdout.trim();
+          resolve(hg_rev);
+        }
       });
   });
 }
 
-function verifyRevisions() {
-  var source = JSON.parse(fs.readFileSync('./tests/fixture/source.json'));
-
-  var revs = [];
-
-  revs.push(getGaiaRevision());
-  revs.push(getLocaleRevision());
-
-  return Promise.all(revs).then(function(revs) {
-    if (revs[0] !== source.gaia_revision) {
-      throw new Error(
-        'Gaia revision mismatch.\n ' + config.GAIA_DIR +
-        ' should be in revision: ' + source.gaia_revision);
-    }
-    if (revs[1] !== source.fr_revision) {
-      throw new Error(
-        'Locale revision mismatch\n ' + config.LOCALE_BASEDIR +
-        ' should be in revision: ' + source.fr_revision);
-    }
-  });
+function updateRevisions(gaia, l10n) {
+  return Promise.all([
+    updateGaiaRevision(gaia),
+    updateLocaleRevision(l10n)
+  ]);
 }
 
 function compareManifests(path1, path2) {
@@ -122,14 +115,14 @@ function build() {
   return lpBuilder.init().then(lpBuilder.build.bind(lpBuilder));
 }
 
-function compare() {
+function compare(ver) {
   return new Promise(function(resolve, reject) {
-    exec('diff -uNr ./tests/out/fr ./tests/fixture/fr',
+    exec('diff -uNr ./tests/out/fr ./tests/fixture/' + ver + '/fr',
       function(error, stdout) {
         if (stdout.length === 0) {
           if (compareManifests(
               './tests/out/manifest.webapp',
-              './tests/fixture/manifest.webapp')) {
+              './tests/fixture/' + ver + '/manifest.webapp')) {
             resolve();
           } else {
             reject('manifest mismatch');
@@ -156,12 +149,27 @@ function checkIcon() {
 }
 
 suite('Lp builder', function() {
-  test('build french locale identical to fixture', function(done) {
-    verifyRevisions()
+  test('build french locale identical to fixture (2.2)', function(done) {
+    this.timeout(5000);
+    updateRevisions('791e53728cd8018f1d7cf7efe06bbeb1179f0370', '7ea0828dcc36')
       .then(cleanup)
       .then(build)
-      .then(compare)
-      //.then(checkIcon)
+      .then(compare.bind(null, '2.2'))
+      .then(checkIcon)
+      .then(function() {
+      done();
+    }).catch(function(e) {
+      done(new Error(e));
+    });
+  });
+
+  test('build french locale identical to fixture (2.5)', function(done) {
+    this.timeout(5000);
+    updateRevisions('07baf61', 'd14947328aa0')
+      .then(cleanup)
+      .then(build)
+      .then(compare.bind(null, '2.5'))
+      .then(checkIcon)
       .then(function() {
       done();
     }).catch(function(e) {
